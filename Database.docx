@@ -1,0 +1,268 @@
+6	SCENARIOS BASED
+6.1	OPTIMIZE SQL QUERIES WITH MULTIPLE JOINS
+Performance issues are often resolved by properly indexing, rewriting queries, limiting result sets, and analyzing query execution plans
+6.1.1	Analyzing Queries and Rewriting
+Both complex JOIN statements and multiple JOIN statements may reduce readability and performance. Consider analyzing queries frequently and rewriting them to optimize for the best performance and comprehensibility.
+6.1.2	Using Subqueries
+Breaking down detailed statements into subqueries might optimize SQL queries with multiple JOINs. While these subqueries may lengthen the code, they can break down complex logic and filter data before joining.
+Original query:
+SELECT [c.name](http://c.name/), o.order_id, p.product_name
+FROM Customers c
+JOIN Orders o ON c.customer_id = o.customer_id
+JOIN Products p ON o.product_id = p.product_id
+WHERE o.order_date > '2024-01-01' AND c.city = 'New York';
+Rewritten with subqueries:
+SELECT [c.name](http://c.name/), o.order_id, p.product_name
+FROM Customers c
+WHERE c.city = 'New York'
+AND o.order_id IN (
+SELECT order_id
+FROM Orders
+WHERE order_date > '2024-01-01'
+);
+6.1.3	Ensuring Proper Indexes
+As mentioned, create B-tree, hash, or bitmap indexes on frequently used columns in JOIN conditions, WHERE clauses, and ORDER BY clauses. Ensuring that proper indexes are created on the columns involved in JOIN conditions can significantly improve query performance.
+6.1.4	Using INNER JOIN Over Outer JOINs
+If you only need data where there’s a match in both tables, use INNER JOIN instead of outer JOINs (LEFT, RIGHT, FULL) to reduce writing complex queries and operator errors. Outer JOINs can be slower and return more data than necessary.
+For example, using LEFT JOIN:
+SELECT [c.name](http://c.name/), o.order_id  -- o.order_id might be NULL for unmatched customers
+FROM Customers c
+LEFT JOIN Orders o ON c.customer_id = o.customer_id;
+Using INNER JOIN:
+SELECT [c.name](http://c.name/), o.order_id
+FROM Customers c
+INNER JOIN Orders o ON c.customer_id = o.customer_id;
+6.1.5	Avoiding SELECT *
+Specify the exact columns you need in the SELECT clause instead of using SELECT, which selects all the columns. This reduces the amount of data retrieved during SQL querying with multiple JOINs and dramatically improves processing speed for larger datasets with many columns.
+For example, here is a query that selects all the columns:
+SELECT *
+FROM Customers c
+INNER JOIN Orders o ON c.customer_id = o.customer_id;
+The modified version with selecting only the necessary columns (say, c.name and o.order_id) could be:
+SELECT [c.name](http://c.name/), o.order_id
+FROM Customers c
+INNER JOIN Orders o ON c.customer_id = o.customer_id;
+6.1.6	Using EXISTS or IN
+In some cases, particularly when dealing with large datasets and multiple complex JOIN conditions, using EXISTS or IN can prove to be more efficient than creating subqueries. These instances may include:
+6.1.7	Database Denormalization
+Denormalization is a database optimization technique that intentionally and carefully introduces redundancy, such as duplicating data or combining tables, into a database schema. On the surface, database denormalization appears counterproductive, but in some cases, it can optimize queries with multiple JOIN operations. However, it also introduces data integrity, data storage, and maintenance challenges.
+6.1.8	Using Table Aliases
+Table aliases are used in multiple JOIN queries to improve readability and manageability. As the name suggests, table aliases are shorter, understandable names for tables. They are particularly useful when dealing with JOINs involving multiple tables. An example of a table alias may include:
+SELECT o.order_id, c.customer_name
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+6.1.9	Parallel Processing
+Some database systems support parallel processing, such as parallel query execution or parallelizing JOIN operations across multiple CPU cores. These can distribute the workload of complex JOINs across multiple processors and significantly improve performance for large datasets.
+6.2	TIPS FOR SPEEDING UP SQL QUERIES WITH MULTIPLE JOINS
+Here are some more tips to speed up your SQL queries with multiple JOINS:
+6.2.1	Filtering Early
+Apply WHERE clause filters on tables before joining them. This would significantly reduce the data size involved in JOINs.
+6.2.2	Optimize JOIN order
+Choose the JOIN order that minimizes the number of rows involved in subsequent JOINs.
+6.2.3	Partitioning
+Divide tables into smaller, manageable partitions based on frequently used JOIN columns. This allows the database to focus on relevant data during JOINs.
+6.2.4	Query Caching
+Cache frequently used queries with predictable results to avoid redundant execution. This can be particularly beneficial for read-heavy workloads.
+6.3	FETCH A SPRING DATA JPA DTO PROJECTION
+Projections in Spring Boot provide a way to retrieve only a subset of fields from an entity. This is particularly useful in optimizing performance, reducing memory usage, and securing data access by fetching only the necessary fields. Instead of loading an entire entity with all its attributes, projections allow you to specify exactly which fields you want.
+An SQL projection is basically a query that provides a list of columns in the SELECT clause.
+A DTO projection is a Java Object that contains the column values that were fetched by a given SQL projection query.
+The DTO projection can be a POJO (Plain Old Java Object), a JPA Tuple, or a Java Record, and we can fetch all those DTO projection types using Spring Data JPA.
+
+6.3.1	Fetching a Tuple projection with Spring Data JPA
+The first option you have is to map the SQL projection recording a JPA Tuple container like this:
+@Query("""
+    select
+        p.id as id,
+        p.title as title,
+        c.review as review
+    from PostComment c
+    join c.post p
+    where p.title like :postTitle
+    order by c.id
+    """)
+List<Tuple> findCommentTupleByTitle(
+    @Param("postTitle") String postTitle
+);
+And we can call the findCommentTupleByTitle method like this:
+List<Tuple> commentTuples = postRepository
+    .findCommentTupleByTitle(titleToken);
+ 
+[code lang="java" gutter="false"]
+Tuple commentTuple = commentTuples.get(0);
+ 
+assertEquals(
+    Long.valueOf(1),
+    ((Number) commentTuple.get("id")).longValue()
+);
+ 
+assertTrue(
+    ((String) commentTuple.get("title"))
+        .contains("Chapter nr. 1")
+);
+However, while the Tuple allows us to retrieve the column values by their column alias, we still need to do a type casting, and that’s a major limitation since the customer will have to know upfront the actual type to cast to.
+It would be much better if the projection container were type-safe.
+6.3.2	Fetching an interface-based Proxy projection with Spring Data JPA
+With Spring Data JPA, we can map the SQL projection to a DTO that implements an interface, like the following one:
+public interface PostCommentSummary {
+⠀
+    Long getId();
+⠀
+    String getTitle();
+⠀
+    String getReview();
+}
+The PostSummary interface methods define the name of the associated projection column alias and the type that needs to be used to cast the projection column value.
+Behind the scenes, Spring Data JPA will use a Proxy that implements this interface when returning the PostCommentSummary object references.
+In our case, we can define the findCommentSummaryByTitle repository method to use the aforementioned PostCommentSummary interface like this:
+@Query("""
+    select
+        p.id as id,
+        p.title as title,
+        c.review as review
+    from PostComment c
+    join c.post p
+    where p.title like :postTitle
+    order by c.id
+    """)
+List<PostCommentSummary> findCommentSummaryByTitle(
+    @Param("postTitle") String postTitle
+);
+And when calling the findCommentSummaryByTitle method, we no longer have to cast the projection values:
+List<PostCommentSummary> commentSummaries = postRepository
+    .findCommentSummaryByTitle(titleToken);
+ 
+PostCommentSummary commentSummary = commentSummaries.get(0);
+ 
+assertEquals(
+    Long.valueOf(1),
+    commentSummary.getId().longValue()
+);
+ 
+assertTrue(
+    commentSummary.getTitle()
+        .contains("Chapter nr. 1")
+);
+Much better, right?
+However, there is also a downside to using the Proxy projection. We cannot provide a specific implementation for equals and hashCode, and this limits its usability.
+6.3.3	Fetching a Record DTO projection with Spring Data JPA
+While the Proxy projection is a fine solution, in reality, it’s just as easy to use a Java record as the following one:
+public record PostCommentRecord(
+    Long id,
+    String title,
+    String review
+) {}
+The PostCommentRecord has a very compact definition but provides support for the equals, hashCode, and toString methods.
+To use the PostCommentRecord in our projection, we need to change the JPQL query to use the constructor expression, as illustrated by the following example:
+@Query("""
+    select new PostCommentRecord(
+        p.id as id,
+        p.title as title,
+        c.review as review
+    )
+    from PostComment c
+    join c.post p
+    where p.title like :postTitle
+    order by c.id
+    """)
+List<PostCommentRecord> findCommentRecordByTitle(
+    @Param("postTitle") String postTitle
+);
+Normally, we’d have to use the fully-qualified name of the PostCommentRecord Java class, but thanks to the ClassImportIntegrator offered by the Hypersistence Utils project, we can use the simple Class name in the constructor expression JPQL queries.
+To benefit from this feature, you just need to provide the ClassImportIntegrator that registers all DTO and Record classes in your Java-based Spring configuration bean via the hibernate.integrator_provider Hibernate setting:
+@Bean
+public LocalContainerEntityManagerFactoryBean entityManagerFactory() {
+    LocalContainerEntityManagerFactoryBean entityManagerFactoryBean =
+        new LocalContainerEntityManagerFactoryBean();
+⠀
+    ...
+⠀
+    Properties properties = new Properties();
+    properties.put(
+        "hibernate.integrator_provider",
+        (IntegratorProvider) () -> Collections.singletonList(
+            new ClassImportIntegrator(
+                List.of(
+                    PostCommentDTO.class,
+                    PostCommentRecord.class
+                )
+            )
+        )
+    );
+    entityManagerFactoryBean.setJpaProperties(properties);
+⠀
+    return entityManagerFactoryBean;
+}
+And, when calling the findCommentRecordByTitle method, we can see that we get the expected result back:
+List<PostCommentRecord> commentRecords = postRepository
+    .findCommentRecordByTitle(titleToken);
+ 
+PostCommentRecord commentRecord = commentRecords.get(0);
+ 
+assertEquals(
+    Long.valueOf(1),
+    commentRecord.id()
+);
+ 
+assertTrue(
+    commentRecord.title()
+        .contains("Chapter nr. 1")
+);
+And, unlike the interface-based Proxy, equality works as expected now:
+assertEquals(
+    commentRecord,
+    new PostCommentRecord(
+        commentRecord.id(),
+        commentRecord.title(),
+        commentRecord.review()
+    )
+);
+So, the Java Record solution is much better than the interface-based Proxy one.
+6.3.4	Fetching a POJO DTO projection with Spring Data JPA
+Nevertheless, if you want to have absolute control over your DTO classes, then a POJO is the most flexible solution.
+In our case, we can define the following PostCommentDTO class:
+public class PostCommentDTO {
+⠀
+    private final Long id;
+⠀
+    private final String title;
+⠀
+    private final String review;
+⠀
+    public PostCommentDTO(Long id, String title, String review) {
+        this.id = id;
+        this.title = title;
+        this.review = review;
+    }
+⠀
+    public Long getId() {
+        return id;
+    }
+⠀
+    public String getTitle() {
+        return title;
+    }
+⠀
+    public String getReview() {
+        return review;
+    }
+⠀
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof PostCommentDTO)) return false;
+        PostCommentDTO that = (PostCommentDTO) o;
+        return Objects.equals(getId(), that.getId()) &&
+               Objects.equals(getTitle(), that.getTitle()) &&
+               Objects.equals(getReview(), that.getReview());
+    }
+⠀
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+            getId(),
+            getTitle(),
+            getReview()
+        );
+    }
+}
