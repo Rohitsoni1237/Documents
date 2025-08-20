@@ -1,0 +1,629 @@
+SECNARIOS BASED
+IF WE HAVE LARGE RECORDS THEN HOW CAN WE ANALISE READ AND WRITE PERFORMANCE IN SPRINGBOOT
+To analyze read and write performance in Spring Boot when dealing with large records, focus on identifying bottlenecks and optimizing for efficiency. This includes utilizing tools like Spring Boot Actuator, Micrometer, and third-party profiling tools (e.g., JProfiler and YourKit) to monitor application metrics, CPU/memory usage, and query performance. Consider optimizations like batch processing, streaming data, using proper indexing, and pagination to improve performance. 
+Elaboration:
+1.	1. Monitoring and Profiling:
+•	Spring Boot Actuator: Integrate Spring Boot Actuator to expose health, metrics, and management endpoints. This allows you to monitor application performance and identify potential issues. 
+•	Micrometer: Utilize Micrometer to collect application metrics and integrate with monitoring systems like Prometheus and Grafana. This helps visualize and analyze performance data. 
+•	Third-party Profilers: Use tools like JProfiler or YourKit to delve into CPU, memory, and thread usage. These tools can help identify performance bottlenecks and memory leaks. 
+•	Distributed Tracing: Employ distributed tracing tools like Zipkin or Elastic APM to track requests across microservices and identify latency issues. 
+2.	2. Optimizing Read Operations:
+•	Pagination: Implement pagination to fetch data in smaller chunks, preventing excessive memory consumption. Spring Data JPA provides built-in support for pagination using the Pageable interface. 
+•	Indexing: Analyze query execution plans and create indexes on frequently used columns in WHERE, JOIN, and ORDER BY clauses to speed up data retrieval. 
+•	Streaming Results: Stream results instead of loading everything into memory, especially when dealing with large result sets. 
+3.	3. Optimizing Write Operations:
+•	Batch Processing: Process data in batches rather than one record at a time to reduce overhead, especially when writing to a database. 
+•	Bulk Database Operations: Utilize bulk insert operations provided by many databases, which are much faster than inserting records individually. 
+•	Asynchronous Processing: Use asynchronous processing with @Async and CompletableFuture to handle large files or data processing without blocking the main thread. 
+4.	4. Database Specific Optimizations:
+•	Setting Appropriate Fetch Size: Set an appropriate fetch size (typically 100-1000) when retrieving data from the database. 
+•	Using Read-Only Transactions: Use read-only transactions when possible to avoid unnecessary writes. 
+•	Selecting Only Required Columns: Fetch only the necessary columns rather than entire entities to reduce data transfer and processing overhead. 
+5.	5. Other Considerations:
+•	JVM Tuning: Optimize JVM settings (heap size, GC implementation) for improved performance. 
+•	Code Analysis: Use static code analysis tools like SonarQube or Checkstyle to identify potential performance issues in your code. 
+•	Resource Utilization: Monitor CPU, memory, and disk I/O to identify potential bottlenecks. 
+•	Load Testing: Perform load testing using tools like JMeter or Gatling to simulate real-world traffic and identify performance issues before they impact users. 
+OPTIMIZING PERFORMANCE WITH SPRING DATA JPA
+1. Use Proper Indexing:
+•	Analyze the query execution plans and identify the frequently used columns in WHERE, JOIN, and ORDER BY clauses. Create indexes on these columns to speed up data retrieval.
+•	Avoid excessive indexing, as it can impact insert/update performance. Strike a balance between read and write operations.
+Let’s go through an example:
+Suppose you have a Spring Boot application that uses JPA to interact with a database containing information about books and their authors. You have two main entities: Book and Author.
+@Entity
+public class Book {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String title;
+    private String isbn;
+    
+    @ManyToOne
+    @JoinColumn(name = "author_id")
+    private Author author;
+
+    // Constructors, getters, setters
+}
+
+@Entity
+public class Author {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+
+    // Constructors, getters, setters
+}
+
+Let’s say you frequently run a query to retrieve all books by a specific author. Without any indexes, the database would have to scan through the entire Book table to find the matching rows, which can be very slow as the table grows.
+To address this, you can add an index on the author_id column in the Book table, which is used for the join with the Author table.
+@Entity
+public class Book {
+    // ...
+
+    @ManyToOne
+    @JoinColumn(name = "author_id")
+    @org.hibernate.annotations.Index(name = "author_id_index") // Adding an index
+    private Author author;
+
+    // ...
+}
+By creating this index, querying for books by a specific author becomes much faster because the database can quickly locate the relevant rows based on the indexed column.
+Remember that while indexing can significantly improve query performance, it’s important not to over-index, as indexes come with some overhead in terms of storage and update performance. You should analyze your application’s query patterns and create indexes on columns that are frequently queried or involved in joins.
+In summary, “Use Proper Indexing” in Spring Boot JPA involves adding indexes to database columns that are frequently queried to optimize query performance. This practice can lead to significant improvements in application responsiveness and user experience.
+2. Fetch Strategies:
+“Fetch strategy” refers to the way in which related entities (associated entities) are loaded from the database when querying for an entity. Fetch strategies determine whether related entities should be fetched eagerly or lazily.
+•	Choose appropriate fetch strategies for associations (e.g., lazy loading) to prevent unnecessary loading of related entities.
+•	Use explicit JOIN FETCH clauses in JPQL queries to fetch related entities in a single query when needed.
+Let’s consider an example with two entities: Author and Book. An author can have multiple books, and we’ll look at how to manage the fetch strategy for this relationship.
+@Entity
+public class Author {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    @OneToMany(mappedBy = "author", fetch = FetchType.LAZY) // Lazy fetch strategy
+    private List<Book> books = new ArrayList<>();
+
+    // getters and setters
+}
+
+@Entity
+public class Book {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String title;
+
+    @ManyToOne(fetch = FetchType.EAGER) // Eager fetch strategy
+    @JoinColumn(name = "author_id")
+    private Author author;
+
+    // getters and setters
+}
+In this example, we have set up the fetch strategies for the Author and Book entities:
+•	The Author entity has a one-to-many relationship with the Book entity, and it uses lazy fetching for the books collection. This means that when you fetch an Author, its books collection will not be loaded until you actually access it in your code.
+•	The Book entity has a many-to-one relationship with the Author entity, and it uses eager fetching for the author field. This means that when you fetch a Book, its associated Author will be fetched immediately.
+Remember that choosing the right fetch strategy depends on your application’s requirements and usage patterns. Lazy fetching can lead to N+1 query issues if not managed properly, where each related entity triggers a separate database query. It’s important to analyze your application’s use cases and choose the appropriate fetch strategy accordingly.
+3.Batch Fetching:
+“Batch fetching” refers to a technique used to optimize database queries when dealing with associations between entities, especially one-to-many or many-to-many relationships. It aims to reduce the number of individual database queries performed when loading related entities, thus improving performance and minimizing the N+1 query problem.
+•	Utilize batch fetching to fetch multiple entities in a single query, reducing the N+1 query problem.
+•	Configure batch size using @BatchSize annotation or configuration properties.
+Let’s consider a simplified e-commerce domain with two entities: Order and OrderItem. An order can have multiple order items. We'll focus on optimizing the fetching of order items using batch fetching.
+1.Define Entities:
+@Entity
+public class Order {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // Other order attributes, getters, setters
+}
+
+@Entity
+public class OrderItem {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY) // Use LAZY to avoid loading items eagerly
+    @JoinColumn(name = "order_id")
+    private Order order;
+
+    // Other order item attributes, getters, setters
+}
+In the OrderItem entity, we're using @ManyToOne to define the association with the Order entity. The fetch = FetchType.LAZY setting ensures that the association is loaded lazily, which is a good practice to avoid unnecessary eager loading.
+2. Fetching Order Items with Batch Fetching:
+To perform batch fetching, you can use the @BatchSize annotation from Hibernate (JPA's underlying implementation). This annotation specifies the batch size for fetching associations. It indicates that when loading entities, Hibernate should fetch a certain number of associated entities in a single query.
+@Entity
+@BatchSize(size = 10) // Set the batch size for batch fetching
+public class Order {
+    // ...
+}
+In this example, we’ve set the batch size to 10 for the Order entity, meaning that when fetching orders, Hibernate will also fetch the associated order items in batches of 10.
+3. Fetching Orders with Order Items:
+Now, when you fetch Order entities using a JPA query, Hibernate will automatically use batch fetching to fetch the associated OrderItem entities in batches, reducing the number of queries executed.
+@Repository
+public interface OrderRepository extends JpaRepository<Order, Long> {
+    List<Order> findAll();
+}
+In your service or controller class, you can use the OrderRepository to fetch orders:
+@Service
+public class OrderService {
+    @Autowired
+    private OrderRepository orderRepository;
+
+    public List<Order> getAllOrders() {
+        return orderRepository.findAll();
+    }
+}
+By setting the batch size appropriately and using batch fetching, you can efficiently retrieve Order entities along with their associated OrderItem collections, minimizing the number of database queries executed. This optimization becomes even more noticeable as the size of the dataset increases.
+4.Caching:
+Caching can significantly improve the performance of your application by reducing the number of database queries and increasing response times.
+•	Enable caching with Spring Cache or third-party solutions like Ehcache or Caffeine to store frequently accessed data in memory, reducing database hits.
+•	Use second-level caching to cache data across sessions. Spring Boot supports various caching providers.
+Let’s go through a detailed explanation of caching in Spring Boot JPA with an example:
+1. Cache Eviction:
+Cached data might become stale over time. To handle this, Spring provides the @CacheEvict annotation, which you can use to remove items from the cache when certain conditions are met.
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ProductService {
+
+    @Cacheable("products")
+    public Product getProductById(Long productId) {
+        // Simulate fetching data from the database
+        return databaseService.fetchProductById(productId);
+    }
+
+    @CacheEvict(value = "products", key = "#productId")
+    public void updateProduct(Long productId, Product updatedProduct) {
+        // Simulate updating data in the database
+        databaseService.updateProduct(productId, updatedProduct);
+    }
+}
+In this example, the updateProduct method is marked with @CacheEvict. This means that when this method is called, the corresponding entry in the "products" cache will be removed.
+2.Cache Put:
+If you want to manually put data into the cache, you can use the @CachePut annotation. This annotation is useful when you want to update the cached data as well as return the updated data.
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ProductService {
+
+    @CachePut(value = "products", key = "#productId")
+    public Product updateProduct(Long productId, Product updatedProduct) {
+        // Simulate updating data in the database
+        databaseService.updateProduct(productId, updatedProduct);
+
+        return updatedProduct;
+    }
+}
+In this case, the updateProduct method both updates the data in the database and updates the cache with the new data.
+5.Query Optimization:
+When you use JPA with Spring Boot, you write Java code to interact with your database, and JPA translates these Java objects and operations into SQL queries to manipulate the underlying database. Query optimization becomes important to ensure that these generated SQL queries are efficient, minimize database load, and result in faster response times.
+•	Write efficient JPQL or Criteria API queries that fetch only the required data. Avoid using SELECT *.
+•	Use the appropriate projections (e.g., SELECT NEW or DTO projections) to fetch only necessary fields.
+Here’s an example of how to use query optimization techniques in Spring Boot with JPA:
+Let’s consider a simple scenario where you have an entity class Product representing products in an e-commerce application. Each product has an ID, name, price, and category. You also have a repository interface ProductRepository that extends the JpaRepository interface provided by Spring Data JPA.
+1.	Optimized Query Execution:
+Suppose you want to retrieve a list of products within a specific price range. You can utilize Spring Data JPA’s method naming conventions to create a query method that retrieves products within the desired price range. Spring Data JPA will automatically generate the appropriate SQL query based on the method name.
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    List<Product> findByPriceBetween(double minPrice, double maxPrice);
+}
+In this example, the method findByPriceBetween is used to retrieve products with prices within a given range. Spring Data JPA generates an optimized SQL query for this method.
+6. Use Pagination & Sorting:
+Paging and sorting are strategies employed to restrict the quantity of outcomes retrieved from a query and arrange them according to particular standards. Within Spring Data JPA, these approaches are executed through the utilization of the Pageable interface. This interface empowers you to define the size of each page, the criteria for sorting, and the number of the desired page.
+To use paging and sorting in Spring Data JPA, you need to first define a Pageable object, which contains the page size, the sorting criteria, and the page number. Here's an example:
+Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by(sortBy).descending());
+In this example, pageNumber is the current page number, pageSize is the number of results to return per page, and sortBy is the field to sort by in descending order.
+Once you have a Pageable object, you can use it to query the database and get a page of results. Here's an example of using paging and sorting to get a page of results from a Product repository:
+public Page<Product> findProducts(String keyword, Pageable pageable) {
+    return productRepository.findByName(keyword, pageable);
+}
+In this example, the findByName method is used to search for products by name, and the pageable parameter is used to specify the page size, the sorting criteria, and the page number.
+Using paging and sorting can greatly improve the performance of your Spring Data JPA application, especially when dealing with large datasets. By limiting the number of results returned by a query and sorting them based on specific criteria, you can reduce the amount of data that needs to be processed and returned by the database, resulting in faster response times and improved performance.
+7.Read-Only Operations:
+Mark read-only transactions with @Transactional(readOnly = true) to improve database performance by bypassing unnecessary transaction-related overhead.
+•	Mark read-only transactions with @Transactional(readOnly = true) to improve database performance by bypassing unnecessary transaction-related overhead.
+@Service
+@Transactional(readOnly = true)
+public class OrderService {
+    @Autowired
+    private OrderRepository orderRepository;
+
+    public List<Order> getOrdersByStatus(OrderStatus status) {
+        return orderRepository.findOrdersByStatus(status);
+    }
+}
+8. Batch Operations:
+•	Use batch processing for bulk inserts, updates, and deletes. Spring Data JPA supports batch operations through the saveAll() and deleteAllInBatch() methods.
+@Service
+public class OrderService {
+    @Autowired
+    private OrderRepository orderRepository;
+
+    public List<Order> saveOrders(List<Order> orders) {
+        return orderRepository.saveAll(orders);
+    }
+}
+9.Avoid N+1 Query Problem:
+The N+1 Query Problem is a common performance issue that occurs when using an Object-Relational Mapping (ORM) framework like Spring Boot JPA to retrieve data from a relational database. This problem arises when you fetch a collection of entities and, in order to access related data for each entity, the ORM generates additional queries for each entity. This leads to a significant increase in the number of database queries, resulting in poor performance and increased load on the database server.
+Let’s break down the N+1 Query Problem with a detailed explanation and an example in the context of Spring Boot JPA:
+Scenario:- Consider you have two entities: Author and Book, where an author can have multiple books. The relationship between them is one-to-many (one author has many books). Here are the entity classes:
+@Entity
+public class Author {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    // Other fields, getters, setters...
+}
+
+@Entity
+public class Book {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String title;
+    
+    @ManyToOne
+    @JoinColumn(name = "author_id")
+    private Author author;
+    // Other fields, getters, setters...
+}
+Problem:- Let’s say you want to retrieve a list of authors along with their books. If you fetch the authors and then loop through them to access their books, JPA might generate separate queries for each author’s books. This results in one query to fetch the authors and N queries (where N is the number of authors) to fetch their respective books. Hence, the name “N+1” query problem.
+Example:- Suppose you have two authors, and each author has three books. If you naively retrieve the authors and access their books, you’ll end up with 1 + 2 queries:
+1.	Query to fetch authors.
+2.	Query to fetch books for author 1.
+3.	Query to fetch books for author 2.
+This results in a total of 3 queries, where only one should have sufficed.
+Solution:- To avoid the N+1 Query Problem, you can use the concept of “eager” or “lazy” loading. By default, JPA uses lazy loading for relationships. Lazy loading means related entities are loaded from the database only when you explicitly access them. To fetch related entities eagerly (all at once), you can use the @OneToMany(fetch = FetchType.EAGER) annotation on the collection.
+However, eager loading might not always be the best option, as it can lead to other performance issues, like loading more data than necessary. An alternative is to use explicit queries with joins (JPQL or Criteria API) to fetch the data you need in a single query.
+Using Eager Loading:
+@Entity
+public class Author {
+    // ...
+    
+    @OneToMany(mappedBy = "author", fetch = FetchType.EAGER)
+    private List<Book> books;
+    // ...
+}
+Using Join Fetch Query:
+@Repository
+public interface AuthorRepository extends JpaRepository<Author, Long> {
+    @Query("SELECT DISTINCT a FROM Author a JOIN FETCH a.books")
+    List<Author> findAllWithBooks();
+}
+In this query, JOIN FETCH ensures that authors are retrieved along with their books in a single query.
+By addressing the N+1 Query Problem, you can significantly improve the performance of your Spring Boot JPA applications by minimizing the number of database queries and reducing the load on the database server.
+WHICH IS FASTEST WAY TO FETCH LARGE DATA'S FROM DATABASE IN SPRING BOOT APPLICATION
+Here are the best approaches for handling large datasets in Spring Boot, ordered by performance:
+JdbcTemplate (Fastest)
+•	Provides the best performance as it's closest to the database
+•	Allows direct control over fetch size and connection parameters
+•	Best for very large datasets (millions of records)
+•	No entity mapping overhead
+•	Drawback: Manual mapping required
+Native Queries with Streaming
+•	Nearly as fast as JdbcTemplate
+•	Allows SQL optimization specific to your database
+•	Supports cursor-based fetching
+•	Good balance between performance and convenience
+JPQL with Streaming
+•	Decent performance for large datasets
+•	More maintainable than raw SQL
+•	Database-agnostic
+•	Supports lazy loading
+•	Slightly slower than native queries due to mapping overhead
+Pagination
+•	Good for presenting data to users
+•	Consistent memory usage
+•	Works well with REST APIs
+•	Can be slower for processing entire datasets as it requires multiple queries
+Key recommendations for optimizing large data fetches:
+1.	Set appropriate fetch size (typically 100-1000)
+2.	Use read-only transactions when possible
+3.	Stream results rather than loading everything into memory
+4.	Consider pagination for user-facing operations
+5.	Use proper indexes on your database
+6.	Select only required columns rather than fetching entire entities
+Some code examples // 1. Using JdbcTemplate with Stream
+@Service
+public class UserService {
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    
+    public void processLargeData() {
+        String sql = "SELECT * FROM users WHERE active = true";
+        
+        jdbcTemplate.setFetchSize(1000); // Set appropriate fetch size
+        jdbcTemplate.query(
+            sql,
+            resultSet -> {
+                while (resultSet.next()) {
+                    // Process each row here
+                    User user = User.builder()
+                        .id(resultSet.getLong("id"))
+                        .name(resultSet.getString("name"))
+                        .build();
+                    processUser(user);
+                }
+            }
+        );
+    }
+}
+// 2. Using JPA/JPQL with Streaming
+@Service
+public class UserJpaService {
+    @Autowired
+    private EntityManager entityManager;
+    
+    @Transactional(readOnly = true)
+    public void streamUsers() {
+        String jpql = "SELECT u FROM User u WHERE u.active = true";
+        
+        try (Stream<User> userStream = entityManager.createQuery(jpql, User.class)
+                .setHint(QueryHints.FETCH_SIZE, 1000)
+                .getResultStream()) {
+            
+            userStream.forEach(this::processUser);
+        }
+    }
+}
+// 3. Using Native Query with Cursor
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    @Query(value = "SELECT * FROM users WHERE active = true", 
+           nativeQuery = true)
+    @QueryHints(value = {
+        @QueryHint(name = JDBC_FETCH_SIZE, value = "1000"),
+        @QueryHint(name = READ_ONLY, value = "true")
+    })
+    Stream<User> streamAllUsersWithCursor();
+}
+// 4. Using Pagination
+@Service
+public class UserPaginationService {
+    @Autowired
+    private UserRepository userRepository;
+    
+    public void processUsersInBatches() {
+        int pageSize = 1000;
+        int pageNumber = 0;
+        Page<User> userPage;
+        
+        do {
+            userPage = userRepository.findAll(PageRequest.of(pageNumber, pageSize));
+            processUserBatch(userPage.getContent());
+            pageNumber++;
+        } while (userPage.hasNext());
+    }
+HOW TO TACKLE IF OUR SERVICE IS FACING PERFORMANCE ISSUE WHILE PARSING JSON IN SPRINGBOOT
+When a Spring Boot service encounters performance issues during JSON parsing, several strategies can be employed to address the bottleneck. These strategies range from optimizing the JSON data structure itself to leveraging more efficient parsing techniques and libraries.
+Strategies to improve JSON parsing performance in Spring Boot
+•	Optimize JSON Structure:
+•	Reduce verbosity by using shorter, meaningful key names.
+•	Minimize nesting to simplify the structure.
+•	Eliminate unnecessary whitespace.
+•	Avoid sending redundant data.
+•	Use a Streaming Parser:
+•	Instead of loading the entire JSON into memory, a streaming parser processes the data in chunks.
+•	This approach is beneficial for large JSON payloads, reducing memory consumption and improving parsing speed.
+•	Employ Efficient Parsing Libraries:
+•	Jackson is the default JSON processing library in Spring Boot.
+•	Gson can be an alternative, though benchmarks may be needed to determine the best choice for a specific use case.
+•	Consider specialized libraries like FastJson for potential performance gains.
+•	Caching:
+•	If the JSON data does not change frequently, caching the parsed result can avoid repetitive parsing.
+•	Implement server-side caching to store and serve JSON responses efficiently. 
+•	Compression:
+•	Use compression algorithms like Gzip or Brotli to reduce the size of JSON payloads during transmission. 
+•	Profiling and Monitoring:
+•	Use tools like Spring Boot Actuator or VisualVM to identify performance bottlenecks.
+•	Monitor application health, gather metrics, and trace requests to pinpoint slow operations.
+•	Error Handling:
+•	Handle JsonParseException gracefully to prevent application crashes.
+•	Validate JSON data before parsing to ensure it is well-formed.
+•	Batch Processing:
+•	When dealing with large datasets, process data in batches to reduce the load on the system.
+•	Database Optimization:
+•	If the performance issue is related to fetching data from a database, ensure that the database queries are optimized.
+•	Use pagination to limit the number of results returned.
+•	Consider disabling indexes before importing large amounts of data and re-enabling them afterwards.
+•	Connection Pooling:
+•	If the service communicates with other services via HTTP, use connection pooling to reuse existing connections and reduce overhead.
+•	Alternative Data Formats:
+•	For environments where JSON is not natively supported, consider using alternative data formats like Protocol Buffers (Protobuf), which can offer significant performance improvements.
+•	Thread Management:
+•	Ensure proper thread management, but avoid premature optimization with threading, as parsing should be fast for relatively small JSON files.
+•	Test and Measure:
+•	Use performance testing tools like Visual Studio's performance analyzer or Retrace to measure and compare performance improvements.
+•	Code Review:
+•	Verify that the JSON data is being sent as "raw" data and not as "form-data" in the request body.
+SPRING BOOT: BOOST JPA BULK INSERT PERFORMANCE BY 100X.
+Initially, when I was just trying to do bulk insert using Spring JPA’s saveAll method, I was getting a performance of about 185 seconds per 10,000 records. After doing the following changes below, the performance to insert 10,000 records was just 4.3 seconds.
+Yes, 4.3 Seconds for 10k records.
+So to achieve this, I had to change the way I was inserting data.
+1.	Change the number of records while inserting.
+When I was inserting initially, I was pushing all the 10k records from the list directly by calling the saveAll method. I changed this to a batch size of 30. You could also increase the batch size to even 60, But it doesn’t half the time taken to insert records. (See the table below)
+For this, you need to set the hibernate property batch_size=30 .
+spring.jpa.properties.hibernate.jdbc.batch_size=30
+Then, I added the following connection string properties :
+cachePrepStmts=true
+useServerPrepStmts=true
+rewriteBatchedStatements=truee.g
+jdbc:mysql://localhost:3306/BOOKS_DB?serverTimezone=UTC&cachePrepStmts=true&useServerPrepStmts=true&rewriteBatchedStatements=true
+2. Send Batched records
+Changed the code for inserting, so that saveAll methods get batch sizes of 30 to insert as per what we also set in the properties file. A very crude implementation of something like this.
+for (int i = 0; i < totalObjects; i = i + batchSize) {
+    if( i+ batchSize > totalObjects){
+        List<Book> books1 = books.subList(i, totalObjects - 1);
+        repository.saveAll(books1);
+        break;
+    }
+    List<Book> books1 = books.subList(i, i + batchSize);
+    repository.saveAll(books1);
+}
+This reduced the time by a little, dropping from 185 secs to 153 Secs. That's approximately an 18% improvement.
+3. Change the ID generation strategy.
+This made a major impact.
+Initially, I was using the @GeneratedValue annotation with strategy i.e GenerationType.IDENTITY on my entity class.
+Hibernate has disabled batch updates with this strategy because it has to make a select call to get the id from the database to insert each row. You can read more about it here
+I changed the strategy to SEQUENCE and provided a sequence generator.
+public class Book {
+    @Id
+    @GeneratedValue(strategy = SEQUENCE, generator = "seqGen")
+    @SequenceGenerator(name = "seqGen", sequenceName = "seq", initialValue = 1)
+    private Long id;
+This drastically changed the insert performance as Hibernate was able to leverage bulk inserts.
+From the previous performance improvement of 153 secs, the time to insert 10k records was reduced to only 9 secs. That's an increase in performance of nearly 95%.
+Note: MySQL doesn’t support creating sequences. To get around this, I created a table with the name of the sequence having a single field called next_val . Then I added a single row with an initial value.
+For the above sequence, I created the following :
+CREATE TABLE `seq` (
+  `next_val` bigint(20) DEFAULT NULL
+);INSERT INTO `seq` (`next_val`)
+VALUES
+ (1);
+Hibernate then used this table as a sequence generator.
+Next, I pushed it further to use higher batch sizes and I noticed that doubling the batch size does not double down on time. The time to insert only gradually reduces. You can see this below.
+ 
+The most optimal batch size for my case was 1000 which took around 4.39 secs for 10K records. After that, I saw the performance degrading as you can see in the graph.
+Here are the stats I got.
+ 
+As always you can find the code on my GitHub repo.
+HOW DO IMPLEMENT MULTITHREADIN CONCEPT IF A API IS HIT BY 1LAKH THREADS CONCURRENTLY
+Handling 100,000 concurrent requests hitting a single API endpoint is a significant challenge that requires careful consideration of multithreading, resource management, and overall system architecture. Simply creating 100,000 threads directly within your application is almost guaranteed to lead to severe performance degradation and potential crashes due to resource exhaustion (CPU, memory, thread context switching).
+Here's a breakdown of how you would approach implementing multithreading concepts in such a scenario, focusing on efficient and scalable solutions:
+Core Concepts and Strategies:
+1.	Thread Pooling: Instead of creating a new thread for each incoming request, utilize a thread pool. A thread pool maintains a managed set of worker threads that can be reused to handle multiple requests concurrently. This significantly reduces the overhead of thread creation and destruction.
+o	Fixed-Size Thread Pool: A pool with a fixed number of threads. Suitable when you have a predictable workload and want to limit resource consumption.
+o	Cached Thread Pool: Creates new threads as needed and reuses idle threads. Good for short-lived, bursty workloads, but can lead to unbounded thread creation under extreme load.
+o	Fork/Join Framework: Designed for parallel, recursive tasks. Might be applicable if the processing of a single API request can be broken down into smaller, independent subtasks.
+2.	Asynchronous Processing (Non-Blocking I/O): For I/O-bound operations (e.g., database calls, external API requests), using asynchronous, non-blocking I/O is crucial. This allows a single thread to handle multiple requests concurrently without waiting for I/O operations to complete.
+o	Spring WebFlux (Reactive Programming): Provides a reactive programming model built on Netty, enabling non-blocking and event-driven I/O. Ideal for high-concurrency scenarios.
+o	CompletableFuture: Java's built-in mechanism for asynchronous computation. You can offload I/O-bound tasks to separate threads and handle the results asynchronously.
+o	Virtual Threads (Project Loom - Java 21+): Lightweight threads managed by the JVM. They offer the concurrency benefits of traditional threads with significantly lower overhead, making them a promising solution for high-concurrency I/O-bound tasks.
+3.	Message Queues (for Decoupling and Buffering): Introduce a message queue (e.g., Kafka, RabbitMQ) between the API endpoint and the processing logic.
+o	The API endpoint quickly accepts the request and puts a message onto the queue.
+o	A separate pool of worker threads (consumers) processes the messages from the queue.
+o	This decouples the request handling from the actual processing, providing a buffer to handle sudden spikes in traffic and improving the API's responsiveness.
+4.	Load Balancing: Distribute the incoming 100,000 concurrent requests across multiple instances of your application. A load balancer (e.g., Nginx, HAProxy, cloud-based load balancers) sits in front of your application instances and routes traffic intelligently.
+5.	Horizontal Scaling: Increase the number of application instances to handle the increased load. This allows you to distribute the work across more resources.
+Implementation Strategies in Spring Boot:
+1.	Using @Async and ThreadPoolTaskExecutor:
+o	Annotate methods with @Async to make them run asynchronously in a separate thread.
+o	Configure a ThreadPoolTaskExecutor bean to manage the thread pool used by @Async.
+import org.springframework.context.annotation.Bean; import org.springframework.context.annotation.Configuration; import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;   
+2.	@Configuration
+3.	public class AsyncConfig {
+4.	
+5.	    @Bean(name = "apiProcessingTaskExecutor")
+6.	    public ThreadPoolTaskExecutor apiProcessingTaskExecutor() {
+7.	        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+8.	        executor.setCorePoolSize(100); // Initial number of threads
+9.	        executor.setMaxPoolSize(500); // Maximum number of threads
+10.	        executor.setQueueCapacity(1000); // Queue for waiting tasks
+11.	        executor.setThreadNamePrefix("api-worker-");
+12.	        executor.initialize();
+13.	        return executor;
+14.	    }
+15.	}
+16.	
+17.	import org.springframework.scheduling.annotation.Async;
+18.	import org.springframework.stereotype.Service;
+19.	
+20.	@Service
+21.	public class ApiService {
+22.	
+23.	    @Async("apiProcessingTaskExecutor")
+24.	    public void handleRequest(String requestData) {
+25.	        // Process the request asynchronously
+26.	        System.out.println("Processing request: " + requestData + " on thread: " + Thread.currentThread().getName());
+27.	        // ... your business logic (potentially I/O-bound) ...
+28.	    }
+29.	}
+30.	
+31.	import org.springframework.beans.factory.annotation.Autowired;
+32.	import org.springframework.web.bind.annotation.PostMapping;
+33.	import org.springframework.web.bind.annotation.RequestBody;
+34.	import org.springframework.web.bind.annotation.RestController;
+35.	
+36.	@RestController
+37.	public class ApiController {
+38.	
+39.	    @Autowired
+40.	    private ApiService apiService;
+41.	
+42.	    @PostMapping("/process")
+43.	    public String processRequest(@RequestBody String data) {
+44.	        apiService.handleRequest(data);
+45.	        return "Request accepted for processing."; // Respond quickly
+46.	    }
+47.	}
+48.	```
+49.	
+50.	**Limitations:** While `@Async` helps, for truly high concurrency with potentially long-running I/O operations, reactive programming is often a better fit.
+2.	Using Spring WebFlux:
+o	Add the spring-boot-starter-webflux dependency.
+o	Your controllers and services will return reactive types like Mono and Flux.
+Java
+51.	import org.springframework.web.bind.annotation.PostMapping;
+52.	import org.springframework.web.bind.annotation.RequestBody;
+53.	import org.springframework.web.bind.annotation.RestController;
+54.	import reactor.core.publisher.Mono;
+55.	import reactor.core.scheduler.Schedulers;
+56.	
+57.	@RestController
+58.	public class ReactiveApiController {
+59.	
+60.	    @PostMapping("/process-reactive")
+61.	    public Mono<String> processRequestReactive(@RequestBody String data) {
+62.	        return Mono.fromCallable(() -> {
+63.	            // Simulate I/O-bound operation
+64.	            Thread.sleep(100);
+65.	            System.out.println("Processing reactive request: " + data + " on thread: " + Thread.currentThread().getName());
+66.	            return "Request processed reactively.";
+67.	        }).subscribeOn(Schedulers.boundedElastic()) // Use a dedicated scheduler for blocking tasks
+68.	        .log(); // For logging reactive signals
+69.	    }
+70.	}
+Benefits: Non-blocking I/O allows a small number of threads to handle a large number of concurrent connections efficiently.
+3.	Integrating with Message Queues (e.g., Spring Kafka, Spring AMQP):
+o	Add the appropriate Spring integration dependency for your chosen message queue.
+o	Configure a producer to send messages to the queue when the API is hit.
+o	Implement consumers that asynchronously process messages from the queue using thread pools.
+4.	Leveraging Virtual Threads (Java 21+):
+o	Ensure you are using Java 21 or later.
+o	Spring Boot 3.2+ has experimental support for virtual threads. You can enable them in your application.properties:
+Properties
+71.	spring.threads.virtual.enabled=true
+o	With virtual threads enabled, the @Async annotation and reactive programming models will benefit from the lightweight nature of virtual threads, potentially leading to simpler and more scalable concurrent code for I/O-bound tasks.
+System Architecture Considerations:
+•	Statelessness: Design your API to be stateless. This allows you to easily scale horizontally by adding more instances without worrying about session affinity.
+•	Resource Limits: Carefully configure thread pool sizes, queue capacities, and other resource-related settings based on your server's capabilities and the expected workload. Monitor resource utilization closely.
+•	Database Performance: Ensure your database can handle the increased load. Consider connection pooling, database optimization, and potentially scaling your database.
+•	External Service Limits: If your API interacts with other services, be aware of their rate limits and implement appropriate retry mechanisms and circuit breakers.
+•	Monitoring and Logging: Implement robust monitoring and logging to track performance, identify bottlenecks, and troubleshoot issues under high load.
+In summary, handling 100,000 concurrent API requests effectively requires a combination of:
+•	Efficient Multithreading: Primarily through thread pooling and, ideally, asynchronous, non-blocking I/O (using Spring WebFlux or virtual threads).
+•	Decoupling and Buffering: Using message queues to handle request spikes.
+•	Horizontal Scaling and Load Balancing: Distributing the load across multiple application instances.
+•	Careful Resource Management and System Design: Ensuring all components of your system can handle the high concurrency.
+Directly creating 100,000 traditional threads is almost never the right approach. Focus on efficient resource utilization and non-blocking patterns to achieve scalability. Remember to thoroughly test your application under realistic load conditions to identify and address potential bottlenecks.
+SPRINGBOOT SCENARIOS
+CAN WE APPLY @EXCEPTIONHANDLER ON BOTH PRE EXISTING EXCEPTION AND CUSTOM EXCEPTIONS
+Yes, absolutely! The @ExceptionHandler annotation in Spring can be applied to methods that handle both pre-existing Java exceptions (like NullPointerException, IOException, etc.) and your own custom-defined exception classes.
+This is one of the powerful features of @ExceptionHandler that allows you to centralize and customize the error handling logic for various types of exceptions that might occur within your Spring MVC controllers or @RestControllers.
+How it Works:
+When an exception is thrown within a controller method, Spring's exception resolution mechanism looks for an @ExceptionHandler method within the same controller or in a @ControllerAdvice class that can handle that specific exception type (or a superclass of it).
+Example:
+Let's say you have a pre-existing exception like IllegalArgumentException and a custom exception called ResourceNotFoundException. You can have a controller (or a @ControllerAdvice) with @ExceptionHandler methods for both:
+
