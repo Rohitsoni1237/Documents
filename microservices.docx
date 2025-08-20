@@ -1,0 +1,8 @@
+SERVICE DISCOVERY AND SERVICE REGISTRATION
+In microservices architectures, a service registry is a central repository that stores information about available services, their network locations, and health status. Service discovery is the process of a client finding and connecting to a specific service instance within the network, typically using the service registry. 
+Elaboration:
+•	Service Registry:
+It acts as a database where services register their presence and metadata, including IP addresses, ports, and health checks. This allows other services to find and interact with them. 
+•	Service Discovery:
+When a client needs to use a service, it queries the service registry to get a list of available instances. The client then selects one of the instances based on its own load balancing or other criteria. 
+HOW TO LOAD BALANCE SERVER SIDE AND CLIENT SIDE IN SPRINGBOOT
