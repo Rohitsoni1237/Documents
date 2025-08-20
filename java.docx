@@ -1,0 +1,703 @@
+9	COLLECTION NEW:
+9.1	CONCURRENTHASHMAP VS SYNCHRONIZED HASHMAP:
+       ConcurrentHashMap	                      Synchronized HashMap
+ConcurrentHashMap is a class that implements the ConcurrentMap and serializable interface.
+We can synchronize the HashMap by using the synchronizedMap() method of java.util.Collections class.
+It locks some portion of the map.	It locks the whole map.
+ConcurrentHashMap allows performing concurrent read and write operation. Hence, performance is relatively better than the Synchronized Map.	In Synchronized HashMap, multiple threads can not access the map concurrently. Hence, the performance is relatively less than the ConcurrentHashMap.
+ConcuurentHashMap doesn’t allow inserting null as a key or value.	Synchronized HashMap allows inserting null as a key.
+ConccurentHashMap doesn’t throw ConcurrentModificationException.	Synchronized HashMap throw ConcurrentModificationException.
+
+9.2	THE GENERAL CONTRACT OF HASHCODE IS:
+•	During the execution of the application, if hashCode() is invoked more than once on the same Object then it must consistently return the same Integer value, provided no information used in equals(Object) comparison on the Object is modified. It is not necessary that this Integer value to be remained same from one execution of the application to another execution of the same application.
+•	If two Objects are equal, according to the equals(Object) method, then hashCode() method must produce the same Integer on each of the two Objects.
+•	If two Objects are unequal, according to the equals(Object) method, It is not necessary the Integer value produced by hashCode() method on each of the two Objects will be distinct. It can be same but producing the distinct Integer on each of the two Objects is better for improving the performance of hashing based Collections like HashMap, HashTable…etc.
+
+9.3	HOW HASHMAP USED LINKEDLIST OR BALANCED TREE INTERNALLY?
+
+Balanced Tree (Collision Handling for Long Chains in Java 8+):
+•	To mitigate the performance degradation caused by long linked lists due to excessive hash collisions, Java 8 introduced the optimization of converting a linked list within a bucket into a balanced binary search tree (specifically a TreeNode) when the number of nodes exceeds a certain threshold (TREEIFY_THRESHOLD = 8) and the table's capacity is large enough (MIN_TREEIFY_CAPACITY = 64).
+•	Why a balanced tree? Balanced trees (like red-black trees, which are often used in the underlying implementation) provide a worst-case search time complexity of O(log n), which is significantly better than the O(n) of a linked list when the list becomes long.
+•	Conversion back to LinkedList: If the number of nodes in a tree falls below a certain threshold (UNTREEIFY_THRESHOLD = 6) during resize or removal operations, the tree is converted back to a linked list for better performance in scenarios with fewer collisions.
+
+10	SCENARIO BASED :
+10.1	HOW YOU WILL ASSIGN THE TASKS TO THREADS AND HOW YOU WILL IDENTIFY THE TASK IS COMPLETED..?
+Task Assignment to Threads:
+•	Manual Thread Creation and Management (Less Common for Complex Scenarios):
+o	You can explicitly create Thread objects and pass them a Runnable or Callable task.
+o	You are responsible for starting, managing, and potentially joining these threads.
+o	Assignment: You directly create a thread for each task or a group of related tasks.
+o	Example: 
+Java
+class MyTask implements Runnable {
+    private String taskId;
+    public MyTask(String taskId) { this.taskId = taskId; }
+    public void run() {
+        System.out.println("Task " + taskId + " started by " + Thread.currentThread().getName());
+        // ... task logic ...
+        System.out.println("Task " + taskId + " completed by " + Thread.currentThread().getName());
+    }
+}
+
+public class TaskAssigner {
+    public static void main(String[] args) {
+        for (int i = 0; i < 5; i++) {
+            Thread thread = new Thread(new MyTask("Task-" + i));
+            thread.start();
+        }
+    }
+}
+o	Drawbacks: Difficult to manage thread lifecycle, resource exhaustion can occur if not handled carefully.
+•	Using ExecutorService (Recommended for Managed Thread Pools):
+o	The java.util.concurrent package provides ExecutorService implementations (e.g., ThreadPoolExecutor, FixedThreadPool, CachedThreadPool) for managing a pool of threads.
+o	You submit Runnable or Callable tasks to the ExecutorService. It handles the assignment of these tasks to available threads in the pool.
+o	Assignment: You submit tasks to the ExecutorService using methods likeexecute(Runnable)orsubmit(Runnable/Callable). TheExecutorService`'s internal scheduling mechanism assigns these tasks to available worker threads.
+o	Example: 
+Java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+class MyTask implements Runnable {
+    private String taskId;
+    public MyTask(String taskId) { this.taskId = taskId; }
+    public void run() {
+        System.out.println("Task " + taskId + " started by " + Thread.currentThread().getName());
+        // ... task logic ...
+        System.out.println("Task " + taskId + " completed by " + Thread.currentThread().getName());
+    }
+}
+
+public class TaskAssigner {
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newFixedThreadPool(3); // Create a thread pool with 3 threads
+        for (int i = 0; i < 5; i++) {
+            executor.execute(new MyTask("Task-" + i));
+        }
+        executor.shutdown(); // Initiate a graceful shutdown
+    }
+}
+Identifying Task Completion:
+There are several ways to determine when a task executed by a thread has finished:
+•	For Runnable Tasks:
+o	Implicit Completion: A Runnable task completes when its run() method finishes executing. There's no direct return value or explicit completion signal built into the Runnable interface itself.
+o	Logging/Side Effects: You can log a message or update a shared state variable within the run() method when the task is done.
+o	External Monitoring: If you're managing threads manually, you can use thread.join() to wait for a specific thread to complete. However, this can block the calling thread.
+•	For Callable Tasks (Used with ExecutorService.submit()):
+o	Callable tasks have a call() method that can return a result and throw exceptions.
+o	ExecutorService.submit(Callable) returns a Future object.
+o	Future.isDone(): You can call future.isDone() to check if the task associated with the Future has completed (either normally, by throwing an exception, or by being cancelled).
+o	Future.get(): Calling future.get() will block the current thread until the task completes and returns its result (or throws an exception). You can also use future.get(timeout, unit) to wait for a specified amount of time.
+o	Future.cancel(mayInterruptIfRunning): You can attempt to cancel the task.
+Java
+import java.util.concurrent.*;
+import java.util.List;
+import java.util.ArrayList;
+
+class MyCallableTask implements Callable<String> {
+    private String taskId;
+    public MyCallableTask(String taskId) { this.taskId = taskId; }
+    public String call() throws Exception {
+        System.out.println("Callable Task " + taskId + " started by " + Thread.currentThread().getName());
+        // ... task logic ...
+        Thread.sleep(200);
+        System.out.println("Callable Task " + taskId + " completed by " + Thread.currentThread().getName());
+        return "Result of " + taskId;
+    }
+}
+
+public class CallableTaskAssigner {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        List<Future<String>> futures = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Future<String> future = executor.submit(new MyCallableTask("Callable-Task-" + i));
+            futures.add(future);
+        }
+
+        executor.shutdown();
+
+        for (Future<String> future : futures) {
+            while (!future.isDone()) {
+                System.out.println("Waiting for a task to complete...");
+                Thread.sleep(50);
+            }
+            if (future.isDone()) {
+                System.out.println("Task completed! Result: " + future.get());
+            }
+        }
+    }
+}
+Choosing the Right Approach:
+•	For simple, fire-and-forget tasks with no need for a result, ExecutorService.execute(Runnable) is often sufficient. Completion can be tracked through logging or side effects.
+•	If you need to get a result back from a task or handle exceptions thrown by the task, use ExecutorService.submit(Callable) and the Future object.
+
+   is complete, to retrieve the result of the computation (which might involve waiting), and to cancel the computation.   
+Think of it this way:
+•	Callable is like a recipe for a dish (it defines what to do and what the outcome will be).
+•	Future is like a placeholder for the dish once it's being cooked or has finished cooking. You can check if it's ready, and once it is, you can get the dish.
+2. Method Signatures:
+•	Callable<V>: Has a single method:
+Java
+•	V call() throws Exception;
+o	V: The type of the result returned by the call() method.
+o	throws Exception: The call() method can throw checked exceptions.
+•	Future<V>: Has several methods to manage and inspect the result of the computation:
+Java
+•	boolean cancel(boolean mayInterruptIfRunning);
+•	boolean isCancelled();
+•	boolean isDone();
+•	V get() throws InterruptedException, ExecutionException;
+•	V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException;
+o	V: The type of the result of the computation.
+o	cancel(): Attempts to cancel the task. The mayInterruptIfRunning argument specifies whether the thread executing the task should be interrupted.
+o	isCancelled(): Returns true if the task was cancelled before it completed normally.
+o	isDone(): Returns true if the task completed normally, threw an exception, or was cancelled.
+o	get(): Waits if necessary for the computation to complete, and then retrieves its result. This method can block indefinitely. It throws InterruptedException if the current thread was interrupted while waiting, and ExecutionException if the computation threw an exception.
+o	get(timeout, unit): Waits at most the given time for the computation to complete, and then retrieves its result. It throws TimeoutException if the timeout occurs before the computation completes.
+3. Usage:
+•	Callable: You implement the Callable interface to define a task that you want to execute asynchronously, typically using an ExecutorService. The submit() method of ExecutorService can accept a Callable and returns a Future representing the result of that Callable.
+import java.util.concurrent.Callable; import java.util.concurrent.ExecutorService; import java.util.concurrent.Executors; import java.util.concurrent.Future;   
+•	class MyCallable implements Callable<String> {
+•	    @Override
+•	    public String call() throws Exception {
+•	        // Perform some computation
+•	        Thread.sleep(2000);
+•	        return "Result from Callable";
+•	    }
+•	}
+•	
+•	public class CallableExample {
+•	    public static void main(String[] args) throws Exception {
+•	        ExecutorService executor = Executors.newSingleThreadExecutor();
+•	        Future<String> future = executor.submit(new MyCallable());
+•	
+•	        System.out.println("Doing something else while Callable is running...");
+•	
+•	        // Get the result (will block until Callable completes)
+•	        String result = future.get();
+•	        System.out.println("Result from Callable: " + result);
+•	
+•	        executor.shutdown();
+•	    }
+•	}
+•	```
+•	Future: You obtain a Future object when you submit a Callable or a Runnable to an ExecutorService (using submit()). You then use the methods of the Future to manage or inspect the outcome of the submitted task.
+Java
+•	import java.util.concurrent.ExecutorService;
+•	import java.util.concurrent.Executors;
+•	import java.util.concurrent.Future;
+•	
+•	class MyRunnable implements Runnable {
+•	    @Override
+•	    public void run() {
+•	        System.out.println("Runnable task running...");
+•	        try {
+•	            Thread.sleep(1000);
+•	        } catch (InterruptedException e) {
+•	            Thread.currentThread().interrupt();
+•	        }
+•	        System.out.println("Runnable task finished.");
+•	    }
+•	}
+•	
+•	public class FutureExample {
+•	    public static void main(String[] args) throws Exception {
+•	        ExecutorService executor = Executors.newSingleThreadExecutor();
+•	        Future<?> futureRunnable = executor.submit(new MyRunnable());
+•	
+•	        System.out.println("Doing something after submitting Runnable...");
+•	
+•	        // Check if Runnable is done
+•	        System.out.println("Is Runnable done? " + futureRunnable.isDone());
+•	
+•	        // Wait for Runnable to complete (get() returns null for Runnable)
+•	        futureRunnable.get();
+•	        System.out.println("Runnable is now done.");
+•	
+•	        executor.shutdown();
+•	    }
+•	}
+
+10.3	SCENARIO 1: SHARED COUNTER
+Question: Imagine you have a simple counter variable that multiple threads need to increment. If each thread increments the counter a certain number of times, will the final value of the counter always be correct? Why or why not? How can you ensure the final count is accurate?
+Answer:
+No, the final value of the counter is not guaranteed to be correct without proper synchronization. This is due to the following reasons:
+•	Race Condition: Multiple threads might try to access and modify the counter variable concurrently. The operations of reading the current value, incrementing it, and writing the new value are not atomic. This means that the steps of one thread can be interleaved with the steps of another thread, leading to lost updates.
+For example, consider two threads both reading the counter when it's 5. Both then increment it in their respective processors and try to write back. One write might overwrite the other, resulting in the counter becoming 6 instead of 7.
+•	Visibility Issues: Even if the increment operation itself were atomic (which it isn't for a simple ++ operation), changes made by one thread to a shared variable might not be immediately visible to other threads due to caching.
+To ensure the final count is accurate, you need to synchronize access to the counter variable. Here are a few ways to achieve this:
+•	Using the synchronized keyword: You can synchronize either a method or a block of code that accesses and modifies the counter. This ensures that only one thread can execute that synchronized section at a time, preventing race conditions.
+Java
+class Counter {
+    private int count = 0;
+
+    public synchronized void increment() {
+        count++;
+    }
+
+    public int getCount() {
+        return count;
+    }
+}
+•	Using java.util.concurrent.atomic classes: The java.util.concurrent.atomic package provides classes like AtomicInteger which offer atomic operations on primitive types. These classes use low-level mechanisms (like Compare-and-Swap - CAS) to ensure thread-safe updates without explicit locking.
+Java
+import java.util.concurrent.atomic.AtomicInteger;
+
+class AtomicCounter {
+    private AtomicInteger count = new AtomicInteger(0);
+
+    public void increment() {
+        count.incrementAndGet();
+    }
+
+    public int getCount() {
+        return count.get();
+    }
+}
+•	Using Locks from java.util.concurrent.locks: You can use explicit Lock implementations like ReentrantLock to control access to the shared resource. You need to acquire the lock before accessing the shared variable and release it in a finally block to ensure it's always released.
+Java
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+class LockCounter {
+    private int count = 0;
+    private final Lock lock = new ReentrantLock();
+
+    public void increment() {
+        lock.lock();
+        try {
+            count++;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int getCount() {
+        lock.lock();
+        try {
+            return count;
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+10.4	SCENARIO 2: PRODUCER-CONSUMER PROBLEM
+Question: Describe the producer-consumer problem in the context of multithreading. What are the challenges involved, and how can you solve it using Java's concurrency utilities?
+Answer:
+The producer-consumer problem is a classic concurrency pattern where one or more producer threads generate data and place it into a shared buffer, and one or more consumer threads retrieve and process this data from the buffer.
+The main challenges in this scenario are:
+•	Buffer Overflow: Producers shouldn't add data to the buffer if it's full.
+•	Buffer Underflow: Consumers shouldn't try to retrieve data from the buffer if it's empty.
+•	Coordination: Producers and consumers need a mechanism to signal each other about the availability of data or space in the buffer.
+Java provides several concurrency utilities to solve this problem effectively:
+•	Using synchronized and wait()/notify()/notifyAll(): You can use the intrinsic locks of objects along with the wait(), notify(), and notifyAll() methods to implement the coordination.
+o	Producers wait() if the buffer is full and notify() or notifyAll() when they add an item.
+o	Consumers wait() if the buffer is empty and notify() or notifyAll() when they consume an item.
+Java
+import java.util.LinkedList;
+import java.util.Queue;
+
+class Buffer {
+    private final Queue<Integer> buffer = new LinkedList<>();
+    private final int capacity;
+
+    public Buffer(int capacity) {
+        this.capacity = capacity;
+    }
+
+    public synchronized void produce(int item) throws InterruptedException {
+        while (buffer.size() == capacity) {
+            wait(); // Wait if buffer is full
+        }
+        buffer.offer(item);
+        notifyAll(); // Notify consumers that an item is available
+    }
+
+    public synchronized int consume() throws InterruptedException {
+        while (buffer.isEmpty()) {
+            wait(); // Wait if buffer is empty
+        }
+        int item = buffer.poll();
+        notifyAll(); // Notify producers that space is available
+        return item;
+    }
+}
+
+class Producer implements Runnable {
+    private final Buffer buffer;
+
+    public Producer(Buffer buffer) {
+        this.buffer = buffer;
+    }
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                System.out.println("Producer produced: " + i);
+                buffer.produce(i);
+                Thread.sleep((long) (Math.random() * 100));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+
+class Consumer implements Runnable {
+    private final Buffer buffer;
+
+    public Consumer(Buffer buffer) {
+        this.buffer = buffer;
+    }
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                int item = buffer.consume();
+                System.out.println("Consumer consumed: " + item);
+                Thread.sleep((long) (Math.random() * 150));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+
+public class ProducerConsumerExample {
+    public static void main(String[] args) {
+        Buffer buffer = new Buffer(5);
+        Thread producerThread = new Thread(new Producer(buffer));
+        Thread consumerThread = new Thread(new Consumer(buffer));
+
+        producerThread.start();
+        consumerThread.start();
+    }
+}
+•	Using java.util.concurrent data structures: The java.util.concurrent package provides thread-safe data structures specifically designed for concurrent access, such as BlockingQueue (e.g., ArrayBlockingQueue, LinkedBlockingQueue). These queues internally handle the synchronization and waiting/notification mechanisms, making the implementation much simpler.
+Java
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+
+class BlockingBuffer {
+    private final BlockingQueue<Integer> buffer;
+
+    public BlockingBuffer(int capacity) {
+        this.buffer = new LinkedBlockingQueue<>(capacity);
+    }
+
+    public void produce(int item) throws InterruptedException {
+        buffer.put(item); // Blocks if the queue is full
+        System.out.println("Producer produced: " + item);
+    }
+
+    public int consume() throws InterruptedException {
+        int item = buffer.take(); // Blocks if the queue is empty
+        System.out.println("Consumer consumed: " + item);
+        return item;
+    }
+}
+
+class BlockingProducer implements Runnable {
+    private final BlockingBuffer buffer;
+
+    public BlockingProducer(BlockingBuffer buffer) {
+        this.buffer = buffer;
+    }
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                buffer.produce(i);
+                Thread.sleep((long) (Math.random() * 100));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+
+class BlockingConsumer implements Runnable {
+    private final BlockingBuffer buffer;
+
+    public BlockingConsumer(BlockingBuffer buffer) {
+        this.buffer = buffer;
+    }
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                buffer.consume();
+                Thread.sleep((long) (Math.random() * 150));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+}
+
+public class BlockingProducerConsumerExample {
+    public static void main(String[] args) {
+        BlockingBuffer buffer = new BlockingBuffer(5);
+        Thread producerThread = new Thread(new BlockingProducer(buffer));
+        Thread consumerThread = new Thread(new BlockingConsumer(buffer));
+
+        producerThread.start();
+        consumerThread.start();
+    }
+}
+10.5	SCENARIO 3: READ-WRITE LOCKS
+Question: Consider a scenario where you have a data structure that is frequently read by multiple threads but only occasionally written to by a few threads. Using standard synchronized blocks for all access might lead to performance bottlenecks. How can you optimize this using Java's concurrency utilities?
+Answer:
+In a read-heavy, write-rare scenario, using a single lock (like the intrinsic lock provided by synchronized) can be inefficient. While a thread holds the lock for writing, all other threads, including those that only want to read, will be blocked. This can significantly reduce concurrency and performance.
+To optimize this, you can use Read-Write Locks provided by the java.util.concurrent.locks.ReadWriteLock interface and its implementation ReentrantReadWriteLock.
+A Read-Write Lock allows multiple threads to hold a read lock simultaneously, as long as no thread holds a write lock. However, when a thread wants to acquire a write lock, it needs exclusive access, meaning no other thread can hold either a read or a write lock.
+Here's how you can apply it:
+Java
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+class ConcurrentMap<K, V> {
+    private final Map<K, V> map = new HashMap<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final java.util.concurrent.locks.Lock readLock = lock.readLock();
+    private final java.util.concurrent.locks.Lock writeLock = lock.writeLock();
+
+    public V get(K key) {
+        readLock.lock();
+        try {
+            return map.get(key);
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    public void put(K key, V value) {
+        writeLock.lock();
+        try {
+            map.put(key, value);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public void remove(K key) {
+        writeLock.lock();
+        try {
+            map.remove(key);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    public int size() {
+        readLock.lock();
+        try {
+            return map.size();
+        } finally {
+            readLock.unlock();
+        }
+    }
+}
+
+public class ReadWriteLockExample {
+    public static void main(String[] args) {
+        ConcurrentMap<String, Integer> sharedMap = new ConcurrentMap<>();
+
+        // Multiple reader threads
+        for (int i = 0; i < 5; i++) {
+            new Thread(() -> {
+                for (int j = 0; j < 10; j++) {
+                    System.out.println("Reader " + Thread.currentThread().getId() + " got: " + sharedMap.get("key1"));
+                    try {
+                        Thread.sleep((long) (Math.random() * 50));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }).start();
+        }
+
+        // A few writer threads
+        for (int i = 0; i < 2; i++) {
+            new Thread(() -> {
+                for (int j = 0; j < 5; j++) {
+                    sharedMap.put("key1", j);
+                    System.out.println("Writer " + Thread.currentThread().getId() + " put: " + j);
+                    try {
+                        Thread.sleep((long) (Math.random() * 100));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }).start();
+        }
+    }
+}
+By using ReadWriteLock, you allow multiple readers to access the data concurrently, significantly improving performance in read-heavy scenarios. Writers still get exclusive access when they need to modify the data, ensuring data consistency.
+10.6	SCENARIO 4: TASK EXECUTION AND THREAD POOLS
+Question: You have a large number of independent tasks that need to be executed. Creating a new thread for each task can be resource-intensive and lead to performance issues. How can you efficiently manage and execute these tasks in Java?
+Answer:
+Creating a new thread for each short-lived task is generally inefficient due to the overhead of thread creation and destruction. A better approach is to use a thread pool.
+A thread pool is a collection of pre-initialized worker threads that are ready to execute tasks. Instead of creating a new thread for each task, you submit the task to the thread pool, and one of the available worker threads will pick it up and execute it. Once the task is complete, the thread is returned to the pool to await new tasks.
+Java's java.util.concurrent package provides the ExecutorService interface and various implementations for creating and managing thread pools, such as:
+•	Executors.newFixedThreadPool(int nThreads): Creates a thread pool with a fixed number of threads. Tasks are submitted to a queue, and when a thread becomes available, it picks up a task from the queue.
+•	Executors.newCachedThreadPool(): Creates a thread pool that can dynamically adjust the number of threads. It creates new threads as needed and reuses idle threads. Threads that remain idle for a certain period are terminated. This is suitable for short-lived, bursty tasks.
+•	Executors.newSingleThreadExecutor(): Creates a thread pool with a single worker thread. Tasks are executed sequentially.
+•	Executors.newScheduledThreadPool(int corePoolSize): Creates a thread pool that can schedule tasks to run after a delay or periodically.
+Here's an example of using a FixedThreadPool:
+Java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+class Task implements Runnable {
+    private final String name;
+
+    public Task(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public void run() {
+        System.out.println("Executing task: " + name + " by thread: " + Thread.currentThread().getName());
+        try {
+            Thread.sleep((long) (Math.random() * 1000));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        System.out.println("Finished task: " + name);
+    }
+}
+
+public class ThreadPoolExample {
+    public static void main(String[] args) {
+        int numberOfTasks = 10;
+        int numberOfThreads = 3;
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+
+        for (int i = 0; i < numberOfTasks; i++) {
+            executorService.submit(new Task("Task-" + i));
+        }
+
+        // Initiates an orderly shutdown in which previously submitted
+        // tasks are executed, but no new tasks will be accepted.
+        executorService.shutdown();
+
+        try {
+            // Wait for all tasks to complete or a timeout to occur
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                System.err.println("Some tasks did not finish in the allocated time.");
+                executorService.shutdownNow(); // Attempt to interrupt actively executing tasks
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+Using thread pools offers several advantages:
+•	Reduced Overhead: Reusing existing threads avoids the cost of creating and destroying threads for each task.
+•	Improved Performance: Tasks can start executing immediately if a thread is available in the pool.
+•	Resource Management: Limits the number of concurrently running threads, preventing resource exhaustion.
+•	Better Control: Allows you to manage thread lifecycle and execution policies.
+These scenarios and their solutions provide a good foundation for understanding and applying multithreading concepts in Java. Remember to carefully consider the specific requirements of your application when choosing the appropriate concurrency mechanisms. Let me know if you
+
+10.7	HOW MANY TYPES OF THREAD POOL IS THERE?
+1. Based on Management Strategy:
+•	Fixed-Size Thread Pool: This type has a fixed number of threads. Once all threads are busy, new tasks are queued until a thread becomes available. This provides predictable resource usage.   
+•	Cached Thread Pool: This pool creates new threads as needed to handle incoming tasks and reuses idle threads. If a thread remains idle for a certain period, it is terminated and removed from the pool. This type is suitable for short-lived, asynchronous tasks.   
+•	Single-Thread Executor: This is a thread pool with only one thread. All tasks are executed sequentially in the order they are submitted. It's useful for tasks that should not run concurrently.   
+•	Scheduled Thread Pool: This type is designed for scheduling tasks to run after a delay or at fixed intervals. It's useful for tasks like periodic backups or delayed operations.   
+•	Work-Stealing Thread Pool: This pool uses a work-stealing algorithm. Each thread has its own queue of tasks. When a thread finishes its own tasks, it can "steal" tasks from the queue of another busy thread. This aims to keep all threads busy and improve efficiency, especially for tasks that can spawn other tasks.   
+2. Based on Implementation (in Java's java.util.concurrent package):
+The Executors class in Java provides factory methods for creating common types of thread pools, which correspond to the categories above:   
+•	newFixedThreadPool(int nThreads): Creates a fixed-size thread pool.   
+•	newCachedThreadPool(): Creates a cached thread pool.   
+•	newSingleThreadExecutor(): Creates a single-threaded executor.   
+•	newScheduledThreadPool(int corePoolSize): Creates a scheduled thread pool.   
+•	newSingleThreadScheduledExecutor(): Creates a scheduled thread pool with a single thread.   
+•	newWorkStealingPool(): Creates a work-stealing thread pool (available since Java 8).   
+10.8	WHAT IS CLASS LOCK, OBJECT LOCK ?
+In Java, when dealing with multithreading and the synchronized keyword, it's crucial to understand the concept of locks to prevent race conditions and ensure thread safety. There are two main types of intrinsic locks (also known as monitor locks) associated with objects and classes: Object Lock and Class Lock.
+11	Object Lock (Instance Lock)
+•	What it is: Every object in Java has an associated lock. When you use the synchronized keyword on a non-static method or a non-static code block, the lock associated with the specific instance of the object is acquired by the thread entering that synchronized section.
+•	Scope: The object lock is specific to each instance of a class.
+•	How it works: 
+o	If a thread wants to execute a synchronized non-static method or block on a particular object, it must first obtain the lock of that object.
+o	Once a thread holds the object's lock, no other thread can enter any other synchronized non-static method or block of the same object until the first thread releases the lock.
+o	However, different threads can simultaneously access synchronized non-static methods or blocks of different instances of the same class because they would be acquiring different object locks.
+o	Non-synchronized methods and blocks can be accessed by multiple threads concurrently, even if one thread holds the object's lock.
+•	Use case: Object locks are used to protect the instance-specific data of an object from concurrent access by multiple threads.
+Example:
+Java
+•	class Counter {
+•	    private int count = 0;
+•	
+•	    public synchronized void increment() { // Acquires the object lock of the Counter instance
+•	        count++;
+•	    }
+•	
+•	    public void someMethod() {
+•	        synchronized (this) { // Acquires the object lock of the Counter instance
+•	            // Critical section
+•	        }
+•	    }
+•	
+•	    public void nonSynchronizedMethod() {
+•	        // Can be accessed concurrently
+•	    }
+•	}
+•	
+•	Counter c1 = new Counter();
+•	Counter c2 = new Counter();
+•	
+•	// Thread t1 tries to access c1.increment() - acquires lock on c1
+•	// Thread t2 tries to access c1.someMethod() - waits for lock on c1
+•	// Thread t3 tries to access c2.increment() - acquires lock on c2 (different object)
+12	Class Lock (Static Lock)
+•	What it is: Every class in Java also has an associated lock, which is distinct from the object locks of its instances. This lock is associated with the Class object itself.   
+•	Scope: The class lock is unique for each class, regardless of how many instances of that class exist.   
+•	How it works: 
+o	When you use the synchronized keyword on a static method or a synchronized block that uses the class literal (ClassName.class), the thread acquires the class lock.
+o	Once a thread holds the class lock, no other thread can enter any other static synchronized method or any synchronized block that uses the class literal of the same class until the first thread releases the lock.
+o	However, threads can still access synchronized non-static methods or blocks of different instances of the class concurrently, as those use object locks.
+o	Similarly, non-static synchronized methods of different instances can run concurrently with a static synchronized method because they use different locks (object lock vs. class lock).
+•	Use case: Class locks are used to protect the static variables (shared among all instances) of a class from concurrent access. They also synchronize access to code that operates on the class itself, not on a specific instance.
+Example:
+Java
+•	class SharedResource {
+•	    private static int counter = 0;
+•	
+•	    public static synchronized void incrementCounter() { // Acquires the class lock of SharedResource
+•	        counter++;
+•	    }
+•	
+•	    public static void someStaticMethod() {
+•	        synchronized (SharedResource.class) { // Acquires the class lock of SharedResource
+•	            // Critical section for static data
+•	        }
+•	    }
+•	
+•	    public synchronized void instanceMethod() { // Acquires the object lock of the instance
+•	        // Operates on instance-specific data
+•	    }
+•	}
+•	
+•	// Threads accessing SharedResource.incrementCounter() will contend for the class lock.
+•	// Threads accessing different instances' instanceMethod() will contend for their respective object locks.
+13	Key Differences Summarized
+Feature	Object Lock (Instance Lock)	Class Lock (Static Lock)
+Association	Each instance of a class	The Class object of a class
+Acquired by	synchronized non-static methods/blocks (this or object)	synchronized static methods/blocks (ClassName.class)
+Scope	Instance-specific	Class-wide (affects all instances of the class)
+Purpose	Protect instance variables	Protect static variables and class-level operations
+Concurrency	Different instances can have threads in synchronized sections	Only one thread can be in any static synchronized section of the class at a time
+
+
